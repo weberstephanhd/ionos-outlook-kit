@@ -8,7 +8,7 @@
   It also writes a desired-state manifest used by Check/Ensure/Restore helper scripts.
 
 .NOTES
-  Version: 0.0.15
+  Version: 0.0.17
   The script does not store the mailbox password. The password is only used for the live Autodiscover request.
   Use -SslNoRevoke only as a temporary diagnostic workaround for Windows Schannel revocation failures.
 #>
@@ -39,7 +39,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.0.15'
+$Version = '0.0.17'
 
 function Write-Info {
   param([string]$Message)
@@ -386,8 +386,11 @@ function Set-OutlookAutodiscoverRegistry {
   )
 
   foreach ($key in $keys) {
+    # IONOS-documented Microsoft 365 Autodiscover mitigation for hosted Exchange mailboxes.
     Set-DWordValue -Path $key -Name 'ExcludeExplicitO365Endpoint' -Value 1
     Set-DWordValue -Path $key -Name 'ExcludeHttpsRootDomain' -Value 1
+
+    # Kit-specific hardening for the local MAPI/HTTP-first XML path.
     Set-DWordValue -Path $key -Name 'ExcludeHttpsAutoDiscoverDomain' -Value 1
     Set-DWordValue -Path $key -Name 'ExcludeLastKnownGoodUrl' -Value 1
     Set-DWordValue -Path $key -Name 'PreferLocalXML' -Value 1
@@ -428,8 +431,11 @@ function Write-DesiredStateManifest {
     MapiFirstXmlPath = $MapiFirstXml
     RegistryPaths = $registryPaths
     ExpectedDwordValues = [ordered]@{
+      # IONOS-documented Microsoft 365 Autodiscover mitigation.
       ExcludeExplicitO365Endpoint = 1
       ExcludeHttpsRootDomain = 1
+
+      # Additional values used by this kit for local XML pinning and stable repair.
       ExcludeHttpsAutoDiscoverDomain = 1
       ExcludeLastKnownGoodUrl = 1
       PreferLocalXML = 1
@@ -445,6 +451,7 @@ function Write-DesiredStateManifest {
     Notes = @(
       'This manifest describes the desired local Outlook Autodiscover state created by the kit.',
       'It intentionally does not store credentials.',
+      'ExcludeExplicitO365Endpoint and ExcludeHttpsRootDomain reflect the IONOS-documented Microsoft 365 Autodiscover mitigation for hosted Exchange mailboxes.',
       'Use Ensure-OutlookIonosState to re-apply registry values without fetching Autodiscover again.'
     )
   }

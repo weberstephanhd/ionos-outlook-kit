@@ -3,7 +3,7 @@
   Checks whether the local Outlook/IONOS desired state is still present.
 
 .NOTES
-  Version: 0.0.15
+  Version: 0.0.17
 #>
 
 [CmdletBinding()]

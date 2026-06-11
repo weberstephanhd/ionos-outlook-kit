@@ -7,12 +7,12 @@
   does not change Outlook profiles, and does not touch credentials. It checks that the managed XML files
   exist and re-applies the registry values described by the desired-state manifest.
 
-  Version 0.0.15 uses reg.exe for registry writes and verifies the values after writing. This avoids
+  Version 0.0.17 uses reg.exe for registry writes and verifies the values after writing. This avoids
   ambiguous behavior where PowerShell registry-provider writes appeared to be planned but were not visible
   to subsequent checks on some systems.
 
 .NOTES
-  Version: 0.0.15
+  Version: 0.0.17
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'ByEmail')]
@@ -35,7 +35,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.0.15'
+$Version = '0.0.17'
 
 function Get-DomainFromEmail {
   param([string]$Address)
@@ -197,8 +197,11 @@ function New-InferredState {
       'HKCU:\Software\Policies\Microsoft\Office\16.0\Outlook\AutoDiscover'
     )
     ExpectedDwordValues = [pscustomobject]@{
+      # IONOS-documented Microsoft 365 Autodiscover mitigation.
       ExcludeExplicitO365Endpoint = 1
       ExcludeHttpsRootDomain = 1
+
+      # Additional values used by this kit for local XML pinning and stable repair.
       ExcludeHttpsAutoDiscoverDomain = 1
       ExcludeLastKnownGoodUrl = 1
       PreferLocalXML = 1
@@ -213,7 +216,8 @@ function New-InferredState {
     )
     Notes = @(
       'Inferred state created by Ensure-OutlookIonosState because no manifest existed yet.',
-      'It intentionally does not store credentials.'
+      'It intentionally does not store credentials.',
+      'ExcludeExplicitO365Endpoint and ExcludeHttpsRootDomain reflect the IONOS-documented Microsoft 365 Autodiscover mitigation for hosted Exchange mailboxes.'
     )
   }
 }

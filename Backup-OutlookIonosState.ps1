@@ -7,7 +7,7 @@
   default because they can be large and are Exchange cache files. Use -OstHandling Move or Copy deliberately.
 
 .NOTES
-  Version: 0.0.15
+  Version: 0.0.17
 #>
 
 [CmdletBinding()]
@@ -27,7 +27,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.0.15'
+$Version = '0.0.17'
 
 function Get-DomainFromEmail { param([string]$Address) return ($Address -split '@', 2)[1].ToLowerInvariant() }
 function ConvertTo-SafeFilePrefix { param([string]$Domain) return ($Domain.ToLowerInvariant() -replace '[^a-z0-9.-]', '-') }

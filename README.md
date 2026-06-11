@@ -1,6 +1,8 @@
 # IONOS Outlook Kit
 
-Version: 0.0.15
+Version: 0.0.17
+
+The release ZIP is versioned. The repository files and the files inside the ZIP use stable, unversioned script names; the script version is recorded inside each file.
 
 This kit helps classic Outlook for Microsoft 365 connect to IONOS Hosted Microsoft Exchange 2019 mailboxes when Outlook Autodiscover is unreliable, falls back to Microsoft 365 / Outlook.com endpoints, or selects an unusable RPC/HTTP transport path.
 
@@ -24,6 +26,7 @@ The scripts do not store the mailbox password.
 - [Targeted cleanup](#targeted-cleanup)
 - [Rollback](#rollback)
 - [Managed files and registry values](#managed-files-and-registry-values)
+- [IONOS-documented Microsoft 365 Autodiscover mitigation](#ionos-documented-microsoft-365-autodiscover-mitigation)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
 - [References and background](#references-and-background)
@@ -82,12 +85,12 @@ OST handling defaults to `Skip`, because OST files are usually large Exchange ca
 ```text
 ionos-outlook-kit/
   README.md
-  Backup-OutlookIonosState-0.0.15.ps1
-  Restore-OutlookIonosState-0.0.15.ps1
-  Update-IonosExchangeAutodiscover-0.0.15.ps1
-  Ensure-OutlookIonosState-0.0.15.ps1
-  Check-OutlookIonosState-0.0.15.ps1
-  Cleanup-OutlookIonosTestArtifacts-0.0.15.ps1
+  Backup-OutlookIonosState.ps1
+  Restore-OutlookIonosState.ps1
+  Update-IonosExchangeAutodiscover.ps1
+  Ensure-OutlookIonosState.ps1
+  Check-OutlookIonosState.ps1
+  Cleanup-OutlookIonosTestArtifacts.ps1
 ```
 
 ## Installation from ZIP
@@ -95,7 +98,7 @@ ionos-outlook-kit/
 Assuming the ZIP is in the user's Downloads folder:
 
 ```powershell
-$version = "0.0.15"
+$version = "0.0.17"
 $zip = "$env:USERPROFILE\Downloads\ionos-outlook-kit-$version.zip"
 $extractDir = "$env:TEMP\ionos-outlook-kit-$version"
 $targetDir = "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover"
@@ -104,7 +107,7 @@ Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
 Expand-Archive -Path $zip -DestinationPath $extractDir -Force
 New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 
-Copy-Item "$extractDir\ionos-outlook-kit-$version\*.ps1" $targetDir -Force
+Copy-Item "$extractDir\ionos-outlook-kit\*.ps1" $targetDir -Force
 ```
 
 After installation, all scripts are available under:
@@ -121,7 +124,7 @@ Use this flow when setting up a mailbox for the first time on a machine or when 
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -StopOutlook
 ```
@@ -130,7 +133,7 @@ If a large OST must deliberately be moved out of the active Outlook directory:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -StopOutlook `
   -OstHandling Move
@@ -142,7 +145,7 @@ Use `Move` only intentionally. It removes the OST from the active Outlook direct
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistry `
   -BackupBeforeChanges `
@@ -173,7 +176,7 @@ The update script creates:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
   -Detailed
@@ -193,7 +196,7 @@ First check the local state:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
   -Detailed
@@ -205,7 +208,7 @@ Dry-run:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState.ps1" `
   -Email "user@example.tld"
 ```
 
@@ -213,7 +216,7 @@ Apply and verify:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -StopOutlook `
   -Execute
@@ -223,7 +226,7 @@ Apply all local IONOS desired-state manifests on the machine:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState.ps1" `
   -All `
   -StopOutlook `
   -Execute
@@ -239,7 +242,7 @@ Basic check:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
   -Detailed
@@ -249,7 +252,7 @@ Optional online endpoint check:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
   -OnlineCheck `
@@ -262,7 +265,7 @@ For diagnostics only, the check script supports `-SslNoRevoke` for online endpoi
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
   -OnlineCheck `
@@ -278,7 +281,7 @@ Use live refresh only when the local XML files are missing or need to be refresh
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistry `
   -BackupBeforeChanges `
@@ -291,7 +294,7 @@ For live update diagnostics or temporary recovery only, the update script suppor
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistry `
   -StopOutlook `
@@ -304,7 +307,7 @@ If the local XML already exists and only registry values must be restored, use t
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistryFromExistingXml `
   -StopOutlook
@@ -381,7 +384,7 @@ Dry-run for disposable `ADTest*` profiles only:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Cleanup-OutlookIonosTestArtifacts-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Cleanup-OutlookIonosTestArtifacts.ps1" `
   -Email "user@example.tld" `
   -RemoveAdTestProfilesOnly
 ```
@@ -390,7 +393,7 @@ Apply:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Cleanup-OutlookIonosTestArtifacts-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Cleanup-OutlookIonosTestArtifacts.ps1" `
   -Email "user@example.tld" `
   -RemoveAdTestProfilesOnly `
   -StopOutlook `
@@ -407,7 +410,7 @@ Dry-run:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Restore-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Restore-OutlookIonosState.ps1" `
   -BackupDirectory "$env:USERPROFILE\Desktop\outlook-ionos-backups\<backup-folder>" `
   -RestoreRegistry `
   -RestoreFiles `
@@ -418,7 +421,7 @@ Apply:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass `
-  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Restore-OutlookIonosState-0.0.15.ps1" `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Restore-OutlookIonosState.ps1" `
   -BackupDirectory "$env:USERPROFILE\Desktop\outlook-ionos-backups\<backup-folder>" `
   -RestoreRegistry `
   -RestoreFiles `
@@ -461,6 +464,8 @@ ExcludeLastKnownGoodUrl            = 1
 PreferLocalXML                     = 1
 ```
 
+`ExcludeExplicitO365Endpoint` and `ExcludeHttpsRootDomain` are the IONOS-documented Microsoft 365 Autodiscover mitigation values. The remaining DWORD values are used by this kit to pin Outlook to the local MAPI/HTTP-first XML and to avoid stale Autodiscover cache behavior.
+
 Expected string value:
 
 ```text
@@ -481,6 +486,24 @@ For IONOS Hosted Exchange, the relevant redirect host is usually:
 ```text
 exchange2019.ionos.eu
 ```
+
+## IONOS-documented Microsoft 365 Autodiscover mitigation
+
+IONOS documents a Microsoft 365 Autodiscover conflict for hosted Exchange mailboxes. In that scenario Outlook may try to sign in to the domain registered in Microsoft 365 instead of using the hosted Exchange mailbox endpoint.
+
+The IONOS-documented registry values are:
+
+    ExcludeExplicitO365Endpoint = 1
+    ExcludeHttpsRootDomain      = 1
+
+This kit treats those two values as the vendor-documented baseline and always writes and checks them when registry state is applied. The kit also sets additional values that are needed for the local MAPI/HTTP-first XML strategy:
+
+    ExcludeHttpsAutoDiscoverDomain = 1
+    ExcludeLastKnownGoodUrl        = 1
+    PreferLocalXML                 = 1
+    <mailbox-domain>               = <path-to-mapi-first-xml>
+
+The additional values are not a replacement for the IONOS-documented mitigation. They make the known-good local Autodiscover XML explicit, stable, and quickly repairable if Outlook, Microsoft 365, Windows, policy refresh, or security software later removes the registry values.
 
 ## Troubleshooting
 

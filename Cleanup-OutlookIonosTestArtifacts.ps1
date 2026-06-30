@@ -6,7 +6,7 @@
   Defaults to dry-run. Use -Execute to apply. On multi-profile machines, prefer -RemoveAdTestProfilesOnly.
 
 .NOTES
-  Version: 0.0.17
+  Version: 0.0.22
 #>
 
 [CmdletBinding()]

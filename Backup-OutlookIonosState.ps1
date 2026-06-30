@@ -7,7 +7,7 @@
   default because they can be large and are Exchange cache files. Use -OstHandling Move or Copy deliberately.
 
 .NOTES
-  Version: 0.0.17
+  Version: 0.0.22
 #>
 
 [CmdletBinding()]
@@ -27,14 +27,31 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.0.17'
+$Version = '0.0.22'
 
 function Get-DomainFromEmail { param([string]$Address) return ($Address -split '@', 2)[1].ToLowerInvariant() }
 function ConvertTo-SafeFilePrefix { param([string]$Domain) return ($Domain.ToLowerInvariant() -replace '[^a-z0-9.-]', '-') }
+function ConvertTo-RegistryProviderPath {
+  param([string]$RegPath)
+  if ($RegPath -like 'HKCU\*') {
+    return ('Registry::HKEY_CURRENT_USER\' + $RegPath.Substring(5))
+  }
+  throw "Unsupported registry root in path: $RegPath"
+}
+
 function Export-KeyIfExists {
   param([string]$RegPath, [string]$OutputFile)
-  $null = reg query $RegPath 2>$null
-  if ($LASTEXITCODE -eq 0) { reg export $RegPath $OutputFile /y | Out-Null }
+
+  $providerPath = ConvertTo-RegistryProviderPath -RegPath $RegPath
+  if (-not (Test-Path -LiteralPath $providerPath)) {
+    Write-Host "Registry key not present, skipping export: $RegPath"
+    return
+  }
+
+  & reg.exe export $RegPath $OutputFile /y | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to export registry key: $RegPath"
+  }
 }
 
 if ($StopOutlook) { Get-Process OUTLOOK -ErrorAction SilentlyContinue | Stop-Process -Force }

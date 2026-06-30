@@ -8,7 +8,7 @@
   It also writes a desired-state manifest used by Check/Ensure/Restore helper scripts.
 
 .NOTES
-  Version: 0.0.17
+  Version: 0.0.22
   The script does not store the mailbox password. The password is only used for the live Autodiscover request.
   Use -SslNoRevoke only as a temporary diagnostic workaround for Windows Schannel revocation failures.
 #>
@@ -39,7 +39,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.0.17'
+$Version = '0.0.22'
 
 function Write-Info {
   param([string]$Message)
@@ -373,6 +373,29 @@ function Set-StringValue {
   Invoke-RegExe -Arguments @('add', $regPath, '/v', $Name, '/t', 'REG_SZ', '/d', $Value, '/f')
 }
 
+function Remove-RegistryValueIfPresent {
+  param(
+    [string]$Path,
+    [string]$Name
+  )
+
+  if (-not (Test-Path -Path $Path)) {
+    Write-Info "Registry key not present, skipping value removal: $Path::$Name"
+    return
+  }
+
+  try {
+    $null = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
+  }
+  catch {
+    Write-Info "Registry value already absent: $Path::$Name"
+    return
+  }
+
+  Remove-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
+  Write-Info "Registry value removed: $Path::$Name"
+}
+
 function Set-OutlookAutodiscoverRegistry {
   param(
     [string]$Domain,
@@ -395,7 +418,7 @@ function Set-OutlookAutodiscoverRegistry {
     Set-DWordValue -Path $key -Name 'ExcludeLastKnownGoodUrl' -Value 1
     Set-DWordValue -Path $key -Name 'PreferLocalXML' -Value 1
     Set-StringValue -Path $key -Name $Domain -Value $MapiFirstXml
-    & reg.exe delete (Convert-ToRegExePath -Path $key) /v LastKnownGoodUrl /f 2>$null | Out-Null
+    Remove-RegistryValueIfPresent -Path $key -Name 'LastKnownGoodUrl'
 
     if ($RegisterRedirectServers) {
       $redirectKey = Join-Path $key 'RedirectServers'

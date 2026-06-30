@@ -1,6 +1,6 @@
 # IONOS Outlook Kit
 
-Version: 0.0.17
+Version: 0.0.22
 
 The release ZIP is versioned. The repository files and the files inside the ZIP use stable, unversioned script names; the script version is recorded inside each file.
 
@@ -18,6 +18,7 @@ The scripts do not store the mailbox password.
 - [Repository layout](#repository-layout)
 - [Installation from ZIP](#installation-from-zip)
 - [First-time setup](#first-time-setup)
+- [Common mixed-profile first-time setup](#common-mixed-profile-first-time-setup)
 - [Fast repair after Outlook, Microsoft, or Windows changes](#fast-repair-after-outlook-microsoft-or-windows-changes)
 - [Check the local desired state](#check-the-local-desired-state)
 - [Live refresh from IONOS](#live-refresh-from-ionos)
@@ -95,19 +96,79 @@ ionos-outlook-kit/
 
 ## Installation from ZIP
 
-Assuming the ZIP is in the user's Downloads folder:
+Assuming the ZIP is in the user's Downloads folder, copy the complete block below and run it top-to-bottom in PowerShell. Do not run selected lines in reverse order.
+
+The official release ZIP normally contains one top-level `ionos-outlook-kit` folder. A GitHub source ZIP may instead contain a top-level folder such as `ionos-outlook-kit-main`. The installer block below accepts both layouts and locates the source directory by checking for the expected stable, unversioned script names.
 
 ```powershell
-$version = "0.0.17"
-$zip = "$env:USERPROFILE\Downloads\ionos-outlook-kit-$version.zip"
-$extractDir = "$env:TEMP\ionos-outlook-kit-$version"
-$targetDir = "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover"
+& {
+  $ErrorActionPreference = "Stop"
 
-Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
-Expand-Archive -Path $zip -DestinationPath $extractDir -Force
-New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+  $Version = "0.0.22"
+  $Zip = Join-Path $env:USERPROFILE "Downloads\ionos-outlook-kit-$Version.zip"
+  $ExtractDir = Join-Path $env:TEMP "ionos-outlook-kit-$Version"
+  $TargetDir = Join-Path $env:LOCALAPPDATA "Microsoft\Outlook\Autodiscover"
 
-Copy-Item "$extractDir\ionos-outlook-kit\*.ps1" $targetDir -Force
+  $ExpectedScripts = @(
+    "Backup-OutlookIonosState.ps1",
+    "Restore-OutlookIonosState.ps1",
+    "Update-IonosExchangeAutodiscover.ps1",
+    "Ensure-OutlookIonosState.ps1",
+    "Check-OutlookIonosState.ps1",
+    "Cleanup-OutlookIonosTestArtifacts.ps1"
+  )
+
+  if (-not (Test-Path -LiteralPath $Zip -PathType Leaf)) {
+    throw "Release ZIP not found: $Zip"
+  }
+
+  Remove-Item -LiteralPath $ExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
+  Expand-Archive -LiteralPath $Zip -DestinationPath $ExtractDir -Force
+
+  $CandidateDirs = @()
+  $CandidateDirs += Get-Item -LiteralPath $ExtractDir
+  $CandidateDirs += Get-ChildItem -LiteralPath $ExtractDir -Directory -Recurse -Force
+
+  $SourceDir = $null
+  foreach ($CandidateDir in $CandidateDirs) {
+    $MissingScripts = @()
+    foreach ($ScriptName in $ExpectedScripts) {
+      $SourceFile = Join-Path $CandidateDir.FullName $ScriptName
+      if (-not (Test-Path -LiteralPath $SourceFile -PathType Leaf)) {
+        $MissingScripts += $ScriptName
+      }
+    }
+
+    if ($MissingScripts.Count -eq 0) {
+      $SourceDir = $CandidateDir.FullName
+      break
+    }
+  }
+
+  if (-not $SourceDir) {
+    Write-Host "Extracted ZIP content:"
+    Get-ChildItem -LiteralPath $ExtractDir -Recurse -Force | Select-Object -ExpandProperty FullName
+    throw "Could not find a source directory containing all expected IONOS Outlook Kit scripts under: $ExtractDir"
+  }
+
+  New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+
+  foreach ($ScriptName in $ExpectedScripts) {
+    $SourceFile = Join-Path $SourceDir $ScriptName
+    Copy-Item -LiteralPath $SourceFile -Destination $TargetDir -Force
+  }
+
+  foreach ($ScriptName in $ExpectedScripts) {
+    $TargetFile = Join-Path $TargetDir $ScriptName
+    if (-not (Test-Path -LiteralPath $TargetFile -PathType Leaf)) {
+      throw "Install verification failed, copied script not found: $TargetFile"
+    }
+  }
+
+  Write-Host "Source directory: $SourceDir"
+  Write-Host "Installed IONOS Outlook Kit $Version scripts to: $TargetDir"
+}
 ```
 
 After installation, all scripts are available under:
@@ -123,16 +184,28 @@ Use this flow when setting up a mailbox for the first time on a machine or when 
 ### 1. Back up current state
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -StopOutlook
 ```
 
+Missing optional Outlook registry keys are skipped during backup. For example, the policy Autodiscover key may not exist on unmanaged machines.
+
+If OST cache files should be preserved before troubleshooting, copy them into the backup without removing them from the active Outlook directory:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState.ps1" `
+  -Email "user@example.tld" `
+  -StopOutlook `
+  -OstHandling Copy
+```
+
 If a large OST must deliberately be moved out of the active Outlook directory:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -StopOutlook `
@@ -144,7 +217,7 @@ Use `Move` only intentionally. It removes the OST from the active Outlook direct
 ### 2. Create local IONOS Autodiscover XML and register it
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistry `
@@ -175,7 +248,7 @@ The update script creates:
 ### 3. Check the result
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
@@ -188,6 +261,78 @@ A healthy local state should end with:
 Summary: 0 FAIL, 0 WARN
 ```
 
+## Common mixed-profile first-time setup
+
+Use this flow for a typical existing Outlook installation where the only current default profile contains both an IONOS Exchange mailbox and one or more unrelated accounts, for example IMAP accounts.
+
+Example scenario:
+
+```text
+Profile: Outlook
+Exchange mailbox: user@example.tld
+Additional IMAP account: invoices@example.tld
+```
+
+Important rules for this scenario:
+
+- Run the kit from the same Windows user account that uses Outlook. Elevation is usually not required. If PowerShell is started as a different administrator account, HKCU registry writes target the wrong user.
+- Use the IONOS Exchange mailbox address for `Update-IonosExchangeAutodiscover`, `Ensure-OutlookIonosState`, and `Check-OutlookIonosState`. Do not use an IMAP-only account as the reference mailbox.
+- The local Autodiscover registry value is domain-scoped. If Exchange and IMAP accounts share the same mail domain, configure the Exchange mailbox first and add IMAP accounts later with their normal IMAP settings.
+- Keep the old production profile until the new profile is verified. Do not delete the old profile merely because a new profile works.
+- Copy OST files during backup if local cache preservation matters. Do not move or delete productive OST files unless deliberately intended.
+
+Recommended sequence:
+
+1. Install the kit from the ZIP.
+2. Back up the current state and copy OST files:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass `
+     -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Backup-OutlookIonosState.ps1" `
+     -Email "user@example.tld" `
+     -StopOutlook `
+     -OstHandling Copy
+   ```
+
+3. Create the local IONOS Autodiscover XML and registry values for the Exchange mailbox:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass `
+     -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
+     -Email "user@example.tld" `
+     -SetRegistry `
+     -StopOutlook
+   ```
+
+4. Verify the local kit state against the existing profile name:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass `
+     -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
+     -Email "user@example.tld" `
+     -ProfileName "Outlook" `
+     -Detailed
+   ```
+
+5. If the check reports `0 FAIL, 0 WARN` but the old profile still shows a temporary mailbox warning or cannot open a default folder such as Calendar, treat that as old Outlook profile state. Create a new profile instead of destructively repairing the old one.
+6. In Control Panel, open `Mail (Microsoft Outlook)` > `Show Profiles` > `Add`, and use a disposable test name such as `ADTestExchange`.
+7. Use automatic account setup for the Exchange mailbox. Enter the display name, the Exchange mailbox address, and the mailbox password.
+8. If Outlook offers to remember the password for this mailbox, this can be allowed if it is acceptable for the Windows user. The kit itself does not store the mailbox password.
+9. If Outlook asks whether it may configure settings from `https://exchange2019.ionos.eu/autodiscover/autodiscover.xml`, allow it only if the host is the expected IONOS Exchange host. A prompt mentioning an address like `PublicFolderMBX...@exchange2019.ionos.eu` can be normal for Exchange public-folder/system-mailbox discovery when the host is still `exchange2019.ionos.eu`.
+10. Start Outlook with the new profile and verify that the Exchange mailbox, folders, and calendar open and that Outlook shows it is connected to Microsoft Exchange.
+11. Add additional IMAP accounts only after the Exchange profile works. Configure IMAP accounts as IMAP accounts, not as Exchange accounts.
+12. Keep the old profile until the Exchange mailbox and any additional accounts have been verified in the new profile.
+
+If a live update already wrote the XML files but failed before registry completion, finish from the local XML instead of downloading again:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
+  -Email "user@example.tld" `
+  -SetRegistryFromExistingXml `
+  -StopOutlook
+```
+
 ## Fast repair after Outlook, Microsoft, or Windows changes
 
 Use this when Outlook was already working and later disconnects, especially after updates or policy/security-product changes.
@@ -195,7 +340,7 @@ Use this when Outlook was already working and later disconnects, especially afte
 First check the local state:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
@@ -207,7 +352,7 @@ If XML files and the profile are present but registry values are missing, re-app
 Dry-run:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState.ps1" `
   -Email "user@example.tld"
 ```
@@ -215,7 +360,7 @@ powershell.exe -ExecutionPolicy Bypass `
 Apply and verify:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -StopOutlook `
@@ -225,7 +370,7 @@ powershell.exe -ExecutionPolicy Bypass `
 Apply all local IONOS desired-state manifests on the machine:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Ensure-OutlookIonosState.ps1" `
   -All `
   -StopOutlook `
@@ -241,7 +386,7 @@ This is the fastest repair path when a known-good local XML is still available a
 Basic check:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
@@ -251,7 +396,7 @@ powershell.exe -ExecutionPolicy Bypass `
 Optional online endpoint check:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
@@ -264,7 +409,7 @@ A successful MAPI endpoint check normally returns `HTTP/1.1 401 Unauthorized`. T
 For diagnostics only, the check script supports `-SslNoRevoke` for online endpoint checks:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Check-OutlookIonosState.ps1" `
   -Email "user@example.tld" `
   -ProfileName "IONOS-Exchange-MAPI" `
@@ -280,7 +425,7 @@ A healthy Windows/Kaspersky configuration should not need `-SslNoRevoke`.
 Use live refresh only when the local XML files are missing or need to be refreshed from IONOS.
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistry `
@@ -293,7 +438,7 @@ If `curl.exe` fails with `CRYPT_E_NO_REVOCATION_CHECK`, repair from existing loc
 For live update diagnostics or temporary recovery only, the update script supports `-SslNoRevoke`. This passes `--ssl-no-revoke` to `curl.exe` for the Autodiscover download.
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistry `
@@ -306,7 +451,7 @@ Do not use `-SslNoRevoke` as the normal operating mode. Fix the Windows/Kaspersk
 If the local XML already exists and only registry values must be restored, use this instead of live refresh:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Update-IonosExchangeAutodiscover.ps1" `
   -Email "user@example.tld" `
   -SetRegistryFromExistingXml `
@@ -315,21 +460,32 @@ powershell.exe -ExecutionPolicy Bypass `
 
 ## Create or repair the Outlook profile
 
-After the local XML and registry values are in place, create or repair only the specific IONOS Outlook profile. Do not delete unrelated production profiles.
+After the local XML and registry values are in place, create or repair only the specific IONOS Exchange Outlook profile. Do not delete unrelated production profiles.
 
-Suggested profile name:
+For first-time setup or when an old profile shows mailbox-move, temporary-mailbox, or missing-default-folder errors, prefer a new profile over destructive repair of the old profile. Keep the old profile until the new profile is verified.
+
+Suggested profile names:
 
 ```text
 IONOS-Exchange-MAPI
+ADTestExchange
 ```
 
-In classic Outlook account setup:
+In Control Panel, use:
 
-1. Enter the IONOS mailbox address, for example `user@example.tld`.
-2. Select manual setup.
-3. Choose `Exchange`.
-4. Allow IONOS Autodiscover redirects when the host is `exchange2019.ionos.eu`.
-5. Use the IONOS Exchange mailbox password when Outlook asks for credentials.
+```text
+Mail (Microsoft Outlook) > Show Profiles > Add
+```
+
+In classic Outlook account setup, the preferred flow after the kit state is present is automatic account setup:
+
+1. Select `E-mail Account`.
+2. Enter the display name.
+3. Enter the IONOS Exchange mailbox address, for example `user@example.tld`.
+4. Enter and confirm the IONOS Exchange mailbox password.
+5. Let Outlook search for settings automatically.
+6. If Outlook asks to save the mailbox password, allow it if that is acceptable for the Windows user. The kit itself does not store the mailbox password.
+7. Allow IONOS Autodiscover redirects only when the host is the expected IONOS Exchange host, normally `exchange2019.ionos.eu`.
 
 If Outlook displays a redirect prompt such as:
 
@@ -338,6 +494,12 @@ https://exchange2019.ionos.eu/autodiscover/autodiscover.xml
 ```
 
 this is expected for IONOS Hosted Exchange. It can be allowed if the host is the expected IONOS Exchange host.
+
+A prompt mentioning an address like `PublicFolderMBX...@exchange2019.ionos.eu` can be normal for Exchange public-folder/system-mailbox discovery. It can be allowed if the website host is still the expected IONOS Exchange host.
+
+If the profile contains additional IMAP accounts, add them only after the Exchange mailbox works. Configure those accounts as IMAP accounts using their normal IMAP settings. Do not use an IMAP-only mailbox as the reference mailbox for the Exchange Autodiscover update.
+
+If the old profile displays a temporary mailbox warning or a message such as `The folder Calendar cannot be found`, and the kit check already reports `0 FAIL, 0 WARN`, the remaining problem is likely old Outlook profile state rather than the local Autodiscover registry/XML state. Create a new profile and verify the Exchange mailbox there before changing or deleting the old profile.
 
 ## Disposable Outlook Autodiscover test profiles
 
@@ -383,7 +545,7 @@ Prefer targeted cleanup over broad profile deletion.
 Dry-run for disposable `ADTest*` profiles only:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Cleanup-OutlookIonosTestArtifacts.ps1" `
   -Email "user@example.tld" `
   -RemoveAdTestProfilesOnly
@@ -392,7 +554,7 @@ powershell.exe -ExecutionPolicy Bypass `
 Apply:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Cleanup-OutlookIonosTestArtifacts.ps1" `
   -Email "user@example.tld" `
   -RemoveAdTestProfilesOnly `
@@ -409,7 +571,7 @@ Rollback can restore registry and managed files from a backup created before the
 Dry-run:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Restore-OutlookIonosState.ps1" `
   -BackupDirectory "$env:USERPROFILE\Desktop\outlook-ionos-backups\<backup-folder>" `
   -RestoreRegistry `
@@ -420,7 +582,7 @@ powershell.exe -ExecutionPolicy Bypass `
 Apply:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass `
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File "$env:LOCALAPPDATA\Microsoft\Outlook\Autodiscover\Restore-OutlookIonosState.ps1" `
   -BackupDirectory "$env:USERPROFILE\Desktop\outlook-ionos-backups\<backup-folder>" `
   -RestoreRegistry `
@@ -530,6 +692,24 @@ curl fails with CRYPT_E_NO_REVOCATION_CHECK
 Outlook is connected and says all folders are up to date
   -> Do not change the profile
 ```
+
+### PowerShell copy/paste and execution-policy issues
+
+If PowerShell reports a parameter such as `-StopOutlook` or `-OstHandling` as an unknown command, the previous multi-line command was not pasted as one complete command. This usually happens when the line-continuation backtick was omitted, copied with trailing characters, or the lines were executed one by one. Re-run the command as one complete block or convert it to a single line.
+
+If PowerShell reports that script execution is disabled, use the invocation style shown in this README:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<script-path>" <arguments>
+```
+
+This bypasses the execution policy only for that process. It does not permanently change the machine policy.
+
+### Temporary mailbox or missing default folder in an old profile
+
+If the kit check reports `0 FAIL, 0 WARN` but an old Outlook profile shows a temporary mailbox warning or fails with a missing default folder such as Calendar, the local Autodiscover XML and registry state are probably not the remaining problem. The old Outlook profile may contain stale Exchange store, mailbox, or OST bindings.
+
+Do not choose old data as a permanent fix and do not delete the old profile immediately. Create a new test profile, add only the IONOS Exchange mailbox through automatic setup, and verify that mail, folders, and calendar work. Add IMAP accounts only after the Exchange mailbox works in the new profile.
 
 ### Kaspersky / encrypted traffic scanning
 

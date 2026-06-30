@@ -7,12 +7,12 @@
   does not change Outlook profiles, and does not touch credentials. It checks that the managed XML files
   exist and re-applies the registry values described by the desired-state manifest.
 
-  Version 0.0.17 uses reg.exe for registry writes and verifies the values after writing. This avoids
+  Version 0.0.22 uses reg.exe for registry writes and verifies the values after writing. This avoids
   ambiguous behavior where PowerShell registry-provider writes appeared to be planned but were not visible
   to subsequent checks on some systems.
 
 .NOTES
-  Version: 0.0.17
+  Version: 0.0.22
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'ByEmail')]
@@ -35,7 +35,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Version = '0.0.17'
+$Version = '0.0.22'
 
 function Get-DomainFromEmail {
   param([string]$Address)
